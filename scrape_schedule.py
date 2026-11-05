@@ -40,6 +40,8 @@ def main():
     )
 
     response.raise_for_status()
+    with open('source.html', 'w', encoding='utf-8') as f:
+    f.write(response.text)
     response.encoding = response.apparent_encoding or response.encoding
 
     soup = BeautifulSoup(response.text, 'html.parser')
