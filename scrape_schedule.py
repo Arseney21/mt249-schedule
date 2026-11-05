@@ -8,68 +8,77 @@ import requests
 import urllib3.util.connection
 from bs4 import BeautifulSoup
 
-# Принудительно используем IPv4
+# Используем IPv4 для подключения к сайту
 urllib3.util.connection.allowed_gai_family = lambda: socket.AF_INET
 
 SOURCE_URL = (
-    'https://xn--j1afhm.xn--p1ai/'
-    'raspisanie-zanyatiy/raspisanie-nemirovicha/www/cg38.htm'
+    "https://xn--j1afhm.xn--p1ai/"
+    "raspisanie-zanyatiy/raspisanie-nemirovicha/www/cg38.htm"
 )
 
-GROUP = 'МТ-24/9'
-OUT = 'schedule.json'
+GROUP = "МТ-24/9"
+OUT = "schedule.json"
+HTML_OUT = "source.html"
 
 DAYS = [
-    'Понедельник', 'Вторник', 'Среда',
-    'Четверг', 'Пятница', 'Суббота',
-    'Воскресенье'
+    "Понедельник",
+    "Вторник",
+    "Среда",
+    "Четверг",
+    "Пятница",
+    "Суббота",
+    "Воскресенье"
 ]
 
 
-def clean(s):
-    return re.sub(r'\s+', ' ', s or '').strip()
+def clean(value):
+    return re.sub(r"\s+", " ", value or "").strip()
 
 
 def main():
+    print("Загружаем расписание...")
+
     response = requests.get(
         SOURCE_URL,
-        timeout=40,
-        headers={
-            'User-Agent': 'Mozilla/5.0'
-        }
+        timeout=60,
+        headers={"User-Agent": "Mozilla/5.0"}
     )
 
     response.raise_for_status()
-    with open('source.html', 'w', encoding='utf-8') as f:
-    f.write(response.text)
-    response.encoding = response.apparent_encoding or response.encoding
 
-    soup = BeautifulSoup(response.text, 'html.parser')
+    # Сохраняем оригинальную HTML-страницу
+    with open(HTML_OUT, "w", encoding="utf-8") as file:
+        file.write(response.text)
 
-    tables = soup.find_all('table')
+    response.encoding = (
+        response.apparent_encoding or response.encoding
+    )
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    tables = soup.find_all("table")
 
     group_tables = [
         table for table in tables
         if GROUP.lower() in clean(
-            table.get_text(' ', strip=True)
+            table.get_text(" ", strip=True)
         ).lower()
     ]
 
     candidates = group_tables or tables
 
     days = [
-        {'name': name, 'lessons': []}
-        for name in DAYS
+        {"name": day, "lessons": []}
+        for day in DAYS
     ]
 
-    day_index = 0
     total = 0
 
     for table in candidates:
-        for tr in table.find_all('tr'):
+        for row in table.find_all("tr"):
             cells = [
-                clean(cell.get_text(' ', strip=True))
-                for cell in tr.find_all(['th', 'td'])
+                clean(cell.get_text(" ", strip=True))
+                for cell in row.find_all(["td", "th"])
             ]
 
             cells = [cell for cell in cells if cell]
@@ -77,64 +86,65 @@ def main():
             if not cells:
                 continue
 
-            line = ' | '.join(cells)
+            line = " | ".join(cells)
 
-            for i, name in enumerate(DAYS):
-                if name.lower() in line.lower():
-                    day_index = i
+            # Определяем день по русскому названию или сокращению
+            day_match = re.search(
+                r"\b(пн|вт|ср|чт|пт|сб|вс)\b",
+                line.lower()
+            )
 
-            if len(cells) == 1 and len(cells[0]) < 3:
-                continue
+            if day_match:
+                abbreviations = {
+                    "пн": 0,
+                    "вт": 1,
+                    "ср": 2,
+                    "чт": 3,
+                    "пт": 4,
+                    "сб": 5,
+                    "вс": 6
+                }
+                day_index = abbreviations[day_match.group(1)]
+            else:
+                day_index = 0
 
-            time = ''
-            subject = cells[0]
-            teacher = ''
-            room = ''
-
-            for cell in cells:
-                if re.search(r'\d{1,2}[:.]\d{2}', cell):
-                    time = cell
-
-            if len(cells) > 1:
-                subject = cells[1]
-            if len(cells) > 2:
-                teacher = cells[2]
-            if len(cells) > 3:
-                room = cells[3]
-
-            days[day_index]['lessons'].append({
-                'time': time,
-                'subject': subject,
-                'teacher': teacher,
-                'room': room,
-                'text': line
+            # Сохраняем строку целиком, не теряя данные
+            days[day_index]["lessons"].append({
+                "time": "",
+                "subject": line,
+                "teacher": "",
+                "room": "",
+                "text": line
             })
 
             total += 1
 
     result = {
-        'group': GROUP,
-        'source': SOURCE_URL,
-        'updated': datetime.now(timezone.utc).isoformat(),
-        'days': days
+        "group": GROUP,
+        "source": SOURCE_URL,
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "days": days
     }
 
     if total == 0:
-        result['message'] = (
-            'Расписание не удалось распознать.'
+        result["message"] = (
+            "Не удалось распознать таблицу расписания."
         )
 
-    with open(OUT, 'w', encoding='utf-8') as f:
-        json.dump(result, f, ensure_ascii=False, indent=2)
+    with open(OUT, "w", encoding="utf-8") as file:
+        json.dump(
+            result,
+            file,
+            ensure_ascii=False,
+            indent=2
+        )
 
-    print(
-        f'Wrote {OUT}; rows={total}; '
-        f'matching_tables={len(group_tables)}'
-    )
+    print(f"Расписание сохранено. Строк: {total}")
+    print(f"Найдено таблиц группы: {len(group_tables)}")
 
     if total == 0:
-        raise RuntimeError('Расписание не найдено')
+        raise RuntimeError("Расписание не найдено")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
