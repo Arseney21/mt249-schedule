@@ -1,0 +1,15 @@
+{
+  "group": "МТ-24/9",
+  "source": "https://xn--j1afhm.xn--p1ai/raspisanie-zanyatiy/raspisanie-nemirovicha/www/cg38.htm",
+  "updated": null,
+  "message": "Автоматическое обновление ещё не запускалось. Запустите workflow в GitHub Actions.",
+  "days": [
+    {"name":"Понедельник","lessons":[]},
+    {"name":"Вторник","lessons":[]},
+    {"name":"Среда","lessons":[]},
+    {"name":"Четверг","lessons":[]},
+    {"name":"Пятница","lessons":[]},
+    {"name":"Суббота","lessons":[]},
+    {"name":"Воскресенье","lessons":[]}
+  ]
+}
